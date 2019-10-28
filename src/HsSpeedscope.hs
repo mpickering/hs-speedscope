@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns #-}
 module HsSpeedscope where
 
 
@@ -11,6 +12,7 @@ import Data.Foldable
 import qualified Data.Vector.Unboxed as V
 import System.Environment
 import Data.Maybe
+import Data.List.Extra
 
 
 entry :: IO ()
@@ -23,51 +25,61 @@ convertToSpeedscope :: EventLog -> Value
 convertToSpeedscope (EventLog h (Data es)) =
   object [ "version" .= ("0.0.1" :: String)
          , "$schema" .= ("https://www.speedscope.app/file-format-schema.json" :: String)
-         , "shared" .= object [ "frames" .= frames_json ]
-         , "profiles" .= [object [ "type" .= ("sampled" :: String)
-                                , "unit" .= ("none" :: String)
-                                , "name" .= ("test" :: String)
-                                , "startValue" .= (0 :: Int)
-                                , "endValue" .= (length samples :: Int)
-                                , "samples" .= events_json
-                                , "weights" .= sample_weights ]]
+         , "shared" .= object [ "frames" .= ccs_json ]
+         , "profiles" .= map (mkProfile interval) caps
          ]
   where
-    (frames, samples) = foldr processEvents ([], []) es
+    (fromMaybe 1 -> interval, frames, samples) = foldr processEvents (Nothing, [], []) es
 
-    -- Drop 7 events for GC
+    -- Drop 7 events for built in cost centres like GC
 
-    frames_json :: [Value]
-    frames_json = map mkFrame (reverse (drop 7 frames))
+    ccs_json :: [Value]
+    ccs_json = map mkFrame (reverse (drop 7 frames))
 
-    num_frames = length frames_json
+    num_frames = length ccs_json
 
-    events_json :: [[Int]]
-    events_json = mapMaybe mkSample samples
 
-    sample_weights :: [Int]
-    sample_weights = replicate (length events_json) 1
+    caps :: [(Capset, [[Int]])]
+    caps = groupSort $ mapMaybe mkSample samples
 
-    mkFrame :: Frame -> Value
-    mkFrame (Frame n l) = object [ "name" .= l ]
+    mkFrame :: CostCentre -> Value
+    mkFrame (CostCentre n l m s) = object [ "name" .= l, "file" .= s ]
 
-    mkSample :: Sample -> Maybe [Int]
+    mkSample :: Sample -> Maybe (Capset, [Int])
     -- Filter out system frames
     mkSample (Sample ti [k]) | fromIntegral k >= num_frames = Nothing
-    mkSample (Sample ti ccs) = Just $ reverse $ map (subtract 1 . fromIntegral) ccs
+    mkSample (Sample ti ccs) = Just $ (ti, reverse $ map (subtract 1 . fromIntegral) ccs)
 
 
-    processEvents :: Event -> ([Frame], [Sample]) -> ([Frame], [Sample])
-    processEvents (Event t ei c) (fs, cs) =
+    processEvents :: Event -> (Maybe Word64, [CostCentre], [Sample]) -> (Maybe Word64, [CostCentre], [Sample])
+    processEvents (Event t ei c) (mi, fs, cs) =
       case ei of
-        HeapProfCostCentre n l _m _s _ -> (Frame n l : fs, cs)
-        ProfSampleCostCentre t _ st -> (fs, Sample t (V.toList st) : cs)
-        _ -> (fs, cs)
+        ProfBegin interval -> (Just interval, fs, cs)
+        HeapProfCostCentre n l m s _ -> (mi, CostCentre n l m s : fs, cs)
+        ProfSampleCostCentre t _ _ st -> (mi, fs, Sample t (V.toList st) : cs)
+        _ -> (mi, fs, cs)
+
+mkProfile :: Word64 -> (Capset, [[Int]]) -> Value
+mkProfile interval (n, samples) =
+  object [ "type" .= ("sampled" :: String)
+         , "unit" .= ("nanoseconds" :: String)
+         , "name" .= ("test" :: String)
+         , "startValue" .= (0 :: Int)
+         , "endValue" .= (length samples :: Int)
+         , "samples" .= samples
+         , "weights" .= sample_weights ]
+  where
+    sample_weights :: [Word64]
+    sample_weights = replicate (length samples) interval
 
 
-data Frame = Frame Word32 Text
 
-data Sample = Sample Word64 [Word32]
+
+
+
+data CostCentre = CostCentre Word32 Text Text Text
+
+data Sample = Sample Capset [Word32]
 
 
 
