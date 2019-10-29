@@ -5,8 +5,8 @@ cabal-version:       2.4
 
 name:                hs-speedscope
 version:             0.1.0.0
--- synopsis:
--- description:
+synopsis: Convert an eventlog into the speedscope json format
+description: Convert an eventlog into the speedscope json format
 -- bug-reports:
 license:             BSD-3-Clause
 license-file:        LICENSE
