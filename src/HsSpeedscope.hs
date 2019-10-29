@@ -8,7 +8,6 @@ import GHC.RTS.Events
 
 import Data.Word
 import Data.Text (Text)
-import Data.Foldable
 import qualified Data.Vector.Unboxed as V
 import System.Environment
 import Data.Maybe
@@ -30,20 +29,20 @@ entry = do
     _ -> error "Usage: hs-speedscope program.eventlog"
 
 convertToSpeedscope :: EventLog -> Value
-convertToSpeedscope (EventLog h (Data es)) =
-  case rts_version of
-    Just (version, _) | version <= makeVersion [8,9,0]  ->
-      error ("Eventlog is from ghc-" ++ showVersion version ++ " hs-speedscope only works with GHC 8.10 or later")
+convertToSpeedscope (EventLog _h (Data es)) =
+  case el_version of
+    Just (ghc_version, _) | ghc_version <= makeVersion [8,9,0]  ->
+      error ("Eventlog is from ghc-" ++ showVersion ghc_version ++ " hs-speedscope only works with GHC 8.10 or later")
     _ -> object [ "version" .= ("0.0.1" :: String)
                 , "$schema" .= ("https://www.speedscope.app/file-format-schema.json" :: String)
                 , "shared" .= object [ "frames" .= ccs_json ]
-                , "profiles" .= map (mkProfile name interval) caps
-                , "name" .= name
+                , "profiles" .= map (mkProfile profile_name interval) caps
+                , "name" .= profile_name
                 , "activeProfileIndex" .= (0 :: Int)
                 , "exporter" .= version_string
                 ]
   where
-    (EL (fromMaybe "" -> name) rts_version (fromMaybe 1 -> interval) frames samples) =
+    (EL (fromMaybe "" -> profile_name) el_version (fromMaybe 1 -> interval) frames samples) =
       foldr processEvents initEL es
 
     initEL = EL Nothing Nothing Nothing [] []
@@ -63,29 +62,29 @@ convertToSpeedscope (EventLog h (Data es)) =
     caps = groupSort $ mapMaybe mkSample samples
 
     mkFrame :: CostCentre -> Value
-    mkFrame (CostCentre n l m s) = object [ "name" .= l, "file" .= s ]
+    mkFrame (CostCentre _n l _m s) = object [ "name" .= l, "file" .= s ]
 
     mkSample :: Sample -> Maybe (Capset, [Int])
     -- Filter out system frames
-    mkSample (Sample ti [k]) | fromIntegral k >= num_frames = Nothing
+    mkSample (Sample _ti [k]) | fromIntegral k >= num_frames = Nothing
     mkSample (Sample ti ccs) = Just $ (ti, reverse $ map (subtract 1 . fromIntegral) ccs)
 
 
     processEvents :: Event -> EL -> EL
-    processEvents (Event t ei c) el =
+    processEvents (Event _t ei _c) el =
       case ei of
-        ProgramArgs _ (prog_name: _args) -> el { prog_name = Just prog_name }
+        ProgramArgs _ (pname: _args) -> el { prog_name = Just pname }
         RtsIdentifier _ rts_ident -> el { rts_version = parseIdent rts_ident }
-        ProfBegin interval -> el { prof_interval = Just interval }
+        ProfBegin ival -> el { prof_interval = Just ival }
         HeapProfCostCentre n l m s _ -> el { cost_centres = CostCentre n l m s : cost_centres el }
         ProfSampleCostCentre t _ _ st -> el { el_samples = Sample t (V.toList st) : el_samples el }
         _ -> el
 
 mkProfile :: String -> Word64 -> (Capset, [[Int]]) -> Value
-mkProfile prog_name interval (n, samples) =
+mkProfile pname interval (_n, samples) =
   object [ "type" .= ("sampled" :: String)
          , "unit" .= ("nanoseconds" :: String)
-         , "name" .= prog_name
+         , "name" .= pname
          , "startValue" .= (0 :: Int)
          , "endValue" .= (length samples :: Int)
          , "samples" .= samples
