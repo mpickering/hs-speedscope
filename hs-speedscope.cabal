@@ -18,6 +18,8 @@ extra-source-files:  CHANGELOG.md
 
 library
   exposed-modules: HsSpeedscope
+  other-modules: Paths_hs_speedscope
+  autogen-modules: Paths_hs_speedscope
   -- other-modules:
   -- other-extensions:
   build-depends:       base ^>=4.12.0.0, ghc-events, aeson, text, vector, extra

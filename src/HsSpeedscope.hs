@@ -14,6 +14,8 @@ import System.Environment
 import Data.Maybe
 import Data.List.Extra
 
+import Data.Version
+import qualified Paths_hs_speedscope as Paths
 
 entry :: IO ()
 entry = do
@@ -26,10 +28,17 @@ convertToSpeedscope (EventLog h (Data es)) =
   object [ "version" .= ("0.0.1" :: String)
          , "$schema" .= ("https://www.speedscope.app/file-format-schema.json" :: String)
          , "shared" .= object [ "frames" .= ccs_json ]
-         , "profiles" .= map (mkProfile interval) caps
+         , "profiles" .= map (mkProfile name interval) caps
+         , "name" .= name
+         , "activeProfileIndex" .= (0 :: Int)
+         , "exporter" .= version_string
          ]
   where
-    (fromMaybe 1 -> interval, frames, samples) = foldr processEvents (Nothing, [], []) es
+    (fromMaybe "" -> name, fromMaybe 1 -> interval, frames, samples) =
+      foldr processEvents (Nothing, Nothing, [], []) es
+
+    version_string :: String
+    version_string = showVersion Paths.version
 
     -- Drop 7 events for built in cost centres like GC
 
@@ -51,19 +60,20 @@ convertToSpeedscope (EventLog h (Data es)) =
     mkSample (Sample ti ccs) = Just $ (ti, reverse $ map (subtract 1 . fromIntegral) ccs)
 
 
-    processEvents :: Event -> (Maybe Word64, [CostCentre], [Sample]) -> (Maybe Word64, [CostCentre], [Sample])
-    processEvents (Event t ei c) (mi, fs, cs) =
+    processEvents :: Event -> (Maybe String, Maybe Word64, [CostCentre], [Sample]) -> (Maybe String, Maybe Word64, [CostCentre], [Sample])
+    processEvents (Event t ei c) (mn, mi, fs, cs) =
       case ei of
-        ProfBegin interval -> (Just interval, fs, cs)
-        HeapProfCostCentre n l m s _ -> (mi, CostCentre n l m s : fs, cs)
-        ProfSampleCostCentre t _ _ st -> (mi, fs, Sample t (V.toList st) : cs)
-        _ -> (mi, fs, cs)
+        ProgramArgs _ (prog_name: _args) -> (Just prog_name, mi, fs, cs)
+        ProfBegin interval -> (mn, Just interval, fs, cs)
+        HeapProfCostCentre n l m s _ -> (mn, mi, CostCentre n l m s : fs, cs)
+        ProfSampleCostCentre t _ _ st -> (mn, mi, fs, Sample t (V.toList st) : cs)
+        _ -> (mn, mi, fs, cs)
 
-mkProfile :: Word64 -> (Capset, [[Int]]) -> Value
-mkProfile interval (n, samples) =
+mkProfile :: String -> Word64 -> (Capset, [[Int]]) -> Value
+mkProfile prog_name interval (n, samples) =
   object [ "type" .= ("sampled" :: String)
          , "unit" .= ("nanoseconds" :: String)
-         , "name" .= ("test" :: String)
+         , "name" .= prog_name
          , "startValue" .= (0 :: Int)
          , "endValue" .= (length samples :: Int)
          , "samples" .= samples
@@ -71,11 +81,6 @@ mkProfile interval (n, samples) =
   where
     sample_weights :: [Word64]
     sample_weights = replicate (length samples) interval
-
-
-
-
-
 
 data CostCentre = CostCentre Word32 Text Text Text
 
