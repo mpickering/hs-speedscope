@@ -16,10 +16,14 @@ license-file:        LICENSE
 author:              Matthew Pickering
 maintainer:          matthewtpickering@gmail.com
 -- copyright:
--- category:
+category: Development
 tested-with: GHC==8.8.1
 extra-source-files:  CHANGELOG.md
                      README.md
+
+source-repository head
+  type: git
+  location: https://github.com/mpickering/hs-speedscope.git
 
 library
   exposed-modules: HsSpeedscope
