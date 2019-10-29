@@ -67,7 +67,7 @@ convertToSpeedscope (EventLog _h (Data es)) =
     mkSample :: Sample -> Maybe (Capset, [Int])
     -- Filter out system frames
     mkSample (Sample _ti [k]) | fromIntegral k >= num_frames = Nothing
-    mkSample (Sample ti ccs) = Just $ (ti, reverse $ map (subtract 1 . fromIntegral) ccs)
+    mkSample (Sample ti ccs) = Just (ti, reverse $ map (subtract 1 . fromIntegral) ccs)
 
 
     processEvents :: Event -> EL -> EL
