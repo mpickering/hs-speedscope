@@ -31,7 +31,7 @@ entry = do
 convertToSpeedscope :: EventLog -> Value
 convertToSpeedscope (EventLog _h (Data es)) =
   case el_version of
-    Just (ghc_version, _) | ghc_version <= makeVersion [8,9,0]  ->
+    Just (ghc_version, _) | ghc_version < makeVersion [8,9,0]  ->
       error ("Eventlog is from ghc-" ++ showVersion ghc_version ++ " hs-speedscope only works with GHC 8.10 or later")
     _ -> object [ "version" .= ("0.0.1" :: String)
                 , "$schema" .= ("https://www.speedscope.app/file-format-schema.json" :: String)
