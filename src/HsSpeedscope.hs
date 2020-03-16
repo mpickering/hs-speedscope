@@ -18,6 +18,7 @@ import Data.Char
 import Data.Version
 import Text.ParserCombinators.ReadP
 import qualified Paths_hs_speedscope as Paths
+import Debug.Trace
 
 entry :: IO ()
 entry = do
@@ -25,11 +26,13 @@ entry = do
   case fps of
     [fp] -> do
       el <- either error id <$> readEventLogFromFile fp
+      let (EventLog _ (Data es)) = el
+
       encodeFile (fp ++ ".json") (convertToSpeedscope el)
     _ -> error "Usage: hs-speedscope program.eventlog"
 
 convertToSpeedscope :: EventLog -> Value
-convertToSpeedscope (EventLog _h (Data es)) =
+convertToSpeedscope (EventLog _h (Data (sortOn evTime -> es))) =
   case el_version of
     Just (ghc_version, _) | ghc_version < makeVersion [8,9,0]  ->
       error ("Eventlog is from ghc-" ++ showVersion ghc_version ++ " hs-speedscope only works with GHC 8.10 or later")
@@ -43,23 +46,26 @@ convertToSpeedscope (EventLog _h (Data es)) =
                 ]
   where
     (EL (fromMaybe "" -> profile_name) el_version (fromMaybe 1 -> interval) frames samples) =
-      foldr processEvents initEL es
+      snd $ foldl' (flip processEvents) (False, initEL) es
 
     initEL = EL Nothing Nothing Nothing [] []
+
 
     version_string :: String
     version_string = "hs-speedscope@" ++ showVersion Paths.version
 
     -- Drop 7 events for built in cost centres like GC, IDLE etc
+    ccs_raw = reverse (drop 7 (reverse frames))
+
 
     ccs_json :: [Value]
-    ccs_json = map mkFrame (reverse (drop 7 frames))
+    ccs_json = map mkFrame ccs_raw
 
     num_frames = length ccs_json
 
 
     caps :: [(Capset, [[Int]])]
-    caps = groupSort $ mapMaybe mkSample samples
+    caps = groupSort $ mapMaybe mkSample (reverse samples)
 
     mkFrame :: CostCentre -> Value
     mkFrame (CostCentre _n l _m s) = object [ "name" .= l, "file" .= s ]
@@ -67,18 +73,27 @@ convertToSpeedscope (EventLog _h (Data es)) =
     mkSample :: Sample -> Maybe (Capset, [Int])
     -- Filter out system frames
     mkSample (Sample _ti [k]) | fromIntegral k >= num_frames = Nothing
-    mkSample (Sample ti ccs) = Just (ti, reverse $ map (subtract 1 . fromIntegral) ccs)
+    mkSample (Sample ti ccs) = Just (ti, map (subtract 1 . fromIntegral) (reverse ccs))
 
 
-    processEvents :: Event -> EL -> EL
-    processEvents (Event _t ei _c) el =
+    processEvents :: Event -> (Bool, EL) -> (Bool, EL)
+    processEvents (Event _t ei _c) (do_sample, el) =
       case ei of
-        ProgramArgs _ (pname: _args) -> el { prog_name = Just pname }
-        RtsIdentifier _ rts_ident -> el { rts_version = parseIdent rts_ident }
-        ProfBegin ival -> el { prof_interval = Just ival }
-        HeapProfCostCentre n l m s _ -> el { cost_centres = CostCentre n l m s : cost_centres el }
-        ProfSampleCostCentre t _ _ st -> el { el_samples = Sample t (V.toList st) : el_samples el }
-        _ -> el
+        ProgramArgs _ (pname: _args) ->
+          (do_sample, el { prog_name = Just pname })
+        RtsIdentifier _ rts_ident ->
+          (do_sample, el { rts_version = parseIdent rts_ident })
+        ProfBegin ival ->
+          (do_sample, el { prof_interval = Just ival })
+        HeapProfCostCentre n l m s _ ->
+          (do_sample, el { cost_centres = CostCentre n l m s : cost_centres el })
+        ProfSampleCostCentre t _ _ st ->
+          if do_sample then
+            (do_sample, el { el_samples = Sample t (V.toList st) : el_samples el })
+            else (do_sample, el)
+        (UserMarker "start") -> (True, el)
+        (UserMarker "end") -> (False, el)
+        _ -> (do_sample, el)
 
 mkProfile :: String -> Word64 -> (Capset, [[Int]]) -> Value
 mkProfile pname interval (_n, samples) =
@@ -112,6 +127,6 @@ data EL = EL {
     , el_samples :: [Sample]
 }
 
-data CostCentre = CostCentre Word32 Text Text Text
+data CostCentre = CostCentre Word32 Text Text Text deriving Show
 
 data Sample = Sample Capset [Word32]
