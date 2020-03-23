@@ -70,8 +70,8 @@ shouldRead _ = False
 
 transition :: String -> ReadState -> ReadState
 transition s r = case r of
-                   (ReadUntil is n) | s `isPrefixOf` is -> n
-                   (IgnoreUntil is n) | s `isPrefixOf` is -> n
+                   (ReadUntil is n) | is `isPrefixOf` s -> n
+                   (IgnoreUntil is n) | is `isPrefixOf` s -> n
                    _ -> r
 
 initState :: Maybe String -> Maybe String -> ReadState
