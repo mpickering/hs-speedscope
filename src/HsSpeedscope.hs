@@ -61,7 +61,7 @@ data ReadState =
         ReadAll -- Ignore all future
       | IgnoreUntil String ReadState
       | ReadUntil String ReadState
-      | IgnoreAll
+      | IgnoreAll deriving Show
 
 shouldRead :: ReadState -> Bool
 shouldRead ReadAll = True
