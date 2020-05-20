@@ -8,6 +8,7 @@ import GHC.RTS.Events hiding (header, str)
 
 import Data.Word
 import Data.Text (Text)
+import qualified Data.Text
 import qualified Data.Vector.Unboxed as V
 import Data.Maybe
 import Data.List.Extra
@@ -24,8 +25,8 @@ import Data.Semigroup ((<>))
 
 
 data SSOptions = SSOptions { file :: FilePath
-                       , isolateStart :: Maybe String
-                       , isolateEnd :: Maybe String
+                       , isolateStart :: Maybe Text
+                       , isolateEnd :: Maybe Text
                        } deriving Show
 
 
@@ -59,8 +60,8 @@ run os = do
 
 data ReadState =
         ReadAll -- Ignore all future
-      | IgnoreUntil String ReadState
-      | ReadUntil String ReadState
+      | IgnoreUntil Text ReadState
+      | ReadUntil Text ReadState
       | IgnoreAll deriving Show
 
 shouldRead :: ReadState -> Bool
@@ -68,18 +69,18 @@ shouldRead ReadAll = True
 shouldRead (ReadUntil {}) = True
 shouldRead _ = False
 
-transition :: String -> ReadState -> ReadState
+transition :: Text -> ReadState -> ReadState
 transition s r = case r of
-                   (ReadUntil is n) | is `isPrefixOf` s -> n
-                   (IgnoreUntil is n) | is `isPrefixOf` s -> n
+                   (ReadUntil is n) | is `Data.Text.isPrefixOf` s -> n
+                   (IgnoreUntil is n) | is `Data.Text.isPrefixOf` s -> n
                    _ -> r
 
-initState :: Maybe String -> Maybe String -> ReadState
+initState :: Maybe Text -> Maybe Text -> ReadState
 initState Nothing Nothing = ReadAll
 initState (Just s) e = IgnoreUntil s (initState Nothing e)
 initState Nothing  (Just e) = ReadUntil e IgnoreAll
 
-convertToSpeedscope :: (Maybe String, Maybe String) -> EventLog -> Value
+convertToSpeedscope :: (Maybe Text, Maybe Text) -> EventLog -> Value
 convertToSpeedscope (is, ie) (EventLog _h (Data (sortOn evTime -> es))) =
   case el_version of
     Just (ghc_version, _) | ghc_version < makeVersion [8,9,0]  ->
@@ -142,7 +143,7 @@ convertToSpeedscope (is, ie) (EventLog _h (Data (sortOn evTime -> es))) =
         (UserMarker m) -> (transition m do_sample, el)
         _ -> (do_sample, el)
 
-mkProfile :: String -> Word64 -> (Capset, [[Int]]) -> Value
+mkProfile :: Text -> Word64 -> (Capset, [[Int]]) -> Value
 mkProfile pname interval (_n, samples) =
   object [ "type" .= ("sampled" :: String)
          , "unit" .= ("nanoseconds" :: String)
@@ -155,23 +156,25 @@ mkProfile pname interval (_n, samples) =
     sample_weights :: [Word64]
     sample_weights = replicate (length samples) interval
 
-parseIdent :: String -> Maybe (Version, String)
-parseIdent s = listToMaybe $ flip readP_to_S s $ do
+parseIdent :: Text -> Maybe (Version, Text)
+parseIdent s = convert $ listToMaybe $ flip readP_to_S (Data.Text.unpack s) $ do
   void $ string "GHC-"
   [v1, v2, v3] <- replicateM 3 (intP <* optional (char '.'))
   skipSpaces
-  return (makeVersion [v1,v2,v3])
+  return $ makeVersion [v1,v2,v3]
   where
     intP = do
       x <- munch1 isDigit
       return $ read x
 
+    convert x = (\(a, b) -> (a, Data.Text.pack b)) <$> x
+
 data EL = EL {
-    prog_name :: Maybe String
-    , rts_version :: Maybe (Version, String)
-    , prof_interval :: Maybe Word64
-    , cost_centres :: [CostCentre]
-    , el_samples :: [Sample]
+    prog_name :: Maybe Text
+  , rts_version :: Maybe (Version, Text)
+  , prof_interval :: Maybe Word64
+  , cost_centres :: [CostCentre]
+  , el_samples :: [Sample]
 }
 
 data CostCentre = CostCentre Word32 Text Text Text deriving Show
