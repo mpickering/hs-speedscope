@@ -20,10 +20,5 @@ let
     index-state = "2020-12-11T00:00:00Z";
   };
 
-
-  site = import ./nix/site.nix { nixpkgs = pin; hspkgs = pkgSet; };
-
 in
-  { hs-speedscope = pkgSet.hs-speedscope.components.exes.hs-speedscope ;
-  site = site;
-  }
+  { hs-speedscope = pkgSet.hs-speedscope.components.exes.hs-speedscope ; }
