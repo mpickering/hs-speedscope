@@ -21,7 +21,6 @@ import qualified Paths_hs_speedscope as Paths
 
 import Options.Applicative hiding (optional)
 import qualified Options.Applicative as O
-import Data.Semigroup ((<>))
 
 
 data SSOptions = SSOptions { file :: FilePath
