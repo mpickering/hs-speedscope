@@ -17,7 +17,7 @@ let
     compiler-nix-name = haskellCompiler;
     src = haskell.haskellLib.cleanGit { name = "hs-speedscope"; src = ./.; };
     modules = (if ci then ciOptions else []) ++ opts;
-    index-state = "2020-12-11T00:00:00Z";
+    index-state = "2020-12-18T00:00:00Z";
   };
 
 in
