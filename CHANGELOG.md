@@ -1,5 +1,9 @@
 # Revision history for hs-speedscope
 
+## Unreleased
+
+* Support ghc-events 0.14 and 0.15
+
 ## 0.2 -- 2020-03-21
 
 * Add --start and --end options which allow a profile to be filtered by
