@@ -10,6 +10,15 @@ WARNING: Only GHC 8.10 supports generating an eventlog with the correct events f
 2. Run `hs-speedscope` on the resulting eventlog `hs-speedscope program.eventlog`.
 3. Load the resulting `program.eventlog.json` file into [speedscope](https://speedscope.app) to visualise the profile.
 
+## Installation
+
+```shell
+cabal update
+cabal install exe:hs-speedscope
+```
+
+This will install to cabal's per-user default location: `~/.cabal/bin/hs-speedscope`.
+
 ## Filtering an eventlog
 
 It is sometimes useful to isolate a specific part of the sample, for example, when
@@ -26,7 +35,7 @@ be included in the result.
 
 For example, the following invocation will filter the profile between the START and END markers.
 
-```
+```shell
 hs-speedscope File.eventlog --start START --end END
 ```
 
