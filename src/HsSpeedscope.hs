@@ -1,26 +1,27 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# language DuplicateRecordFields #-}
+{-# language NamedFieldPuns #-}
+{-# language OverloadedStrings #-}
+{-# language ViewPatterns #-}
+
 module HsSpeedscope where
 
-
-import Data.Aeson
-import GHC.RTS.Events hiding (header, str)
-
-import Data.Word
-import Data.Text (Text)
-import qualified Data.Text
-import qualified Data.Vector.Unboxed as V
-import Data.Maybe
-import Data.List.Extra
+import Data.String ( fromString )
 import Control.Monad
+import Data.Aeson
 import Data.Char
-
+import Data.List.Extra
+import Data.Maybe
+import qualified Data.Text
+import Data.Text (Text)
+import qualified Data.Vector.Unboxed as V
 import Data.Version
-import Text.ParserCombinators.ReadP
-import qualified Paths_hs_speedscope as Paths
-
-import Options.Applicative hiding (optional)
+import Data.Word
+import GHC.RTS.Events hiding (header, str)
 import qualified Options.Applicative as O
+import Options.Applicative hiding (optional)
+import qualified Paths_hs_speedscope as Paths
+import Speedscope.Schema
+import Text.ParserCombinators.ReadP
 
 
 data SSOptions = SSOptions { file :: FilePath
@@ -53,9 +54,9 @@ entry = do
      <> header "hs-speedscope" )
 
 run :: SSOptions -> IO ()
-run os = do
-  el <- either error id <$> readEventLogFromFile (file os)
-  encodeFile (file os ++ ".json") (convertToSpeedscope (isolateStart os, isolateEnd os) el)
+run SSOptions{ file, isolateStart, isolateEnd } = do
+  el <- either error id <$> readEventLogFromFile file
+  encodeFile (file ++ ".json") (convertToSpeedscope (isolateStart, isolateEnd ) el)
 
 data ReadState =
         ReadAll -- Ignore all future
@@ -84,14 +85,15 @@ convertToSpeedscope (is, ie) (EventLog _h (Data (sortOn evTime -> es))) =
   case el_version of
     Just (ghc_version, _) | ghc_version < makeVersion [8,9,0]  ->
       error ("Eventlog is from ghc-" ++ showVersion ghc_version ++ " hs-speedscope only works with GHC 8.10 or later")
-    _ -> object [ "version" .= ("0.0.1" :: String)
-                , "$schema" .= ("https://www.speedscope.app/file-format-schema.json" :: String)
-                , "shared" .= object [ "frames" .= ccs_json ]
-                , "profiles" .= map (mkProfile profile_name interval) caps
-                , "name" .= profile_name
-                , "activeProfileIndex" .= (0 :: Int)
-                , "exporter" .= version_string
-                ]
+    _ -> toJSON file
+      where
+        file = File
+          { shared             = Shared{ frames = ccs_json }
+          , profiles           = map (mkProfile profile_name interval) caps
+          , name               = Just profile_name
+          , activeProfileIndex = Just 0
+          , exporter           = Just $ fromString version_string
+          }
   where
     (EL (fromMaybe "" -> profile_name) el_version (fromMaybe 1 -> interval) frames samples) =
       snd $ foldl' (flip processEvents) (initState is ie, initEL) es
@@ -106,7 +108,7 @@ convertToSpeedscope (is, ie) (EventLog _h (Data (sortOn evTime -> es))) =
     ccs_raw = reverse (drop 7 (reverse frames))
 
 
-    ccs_json :: [Value]
+    ccs_json :: [Frame]
     ccs_json = map mkFrame ccs_raw
 
     num_frames = length ccs_json
@@ -115,8 +117,8 @@ convertToSpeedscope (is, ie) (EventLog _h (Data (sortOn evTime -> es))) =
     caps :: [(Capset, [[Int]])]
     caps = groupSort $ mapMaybe mkSample (reverse samples)
 
-    mkFrame :: CostCentre -> Value
-    mkFrame (CostCentre _n l _m s) = object [ "name" .= l, "file" .= s ]
+    mkFrame :: CostCentre -> Frame
+    mkFrame (CostCentre _n name _m file) = Frame{ name, file = Just file, col = Nothing, line = Nothing }
 
     mkSample :: Sample -> Maybe (Capset, [Int])
     -- Filter out system frames
@@ -142,17 +144,17 @@ convertToSpeedscope (is, ie) (EventLog _h (Data (sortOn evTime -> es))) =
         (UserMarker m) -> (transition m do_sample, el)
         _ -> (do_sample, el)
 
-mkProfile :: Text -> Word64 -> (Capset, [[Int]]) -> Value
-mkProfile pname interval (_n, samples) =
-  object [ "type" .= ("sampled" :: String)
-         , "unit" .= ("nanoseconds" :: String)
-         , "name" .= pname
-         , "startValue" .= (0 :: Int)
-         , "endValue" .= (length samples :: Int)
-         , "samples" .= samples
-         , "weights" .= sample_weights ]
+mkProfile :: Text -> Word64 -> (Capset, [[Int]]) -> Profile
+mkProfile pname interval (_n, samples) = SampledProfile sampledProfile
   where
-    sample_weights :: [Word64]
+    sampledProfile = MkSampledProfile
+      { unit       = Nanoseconds
+      , name       = pname
+      , startValue = 0
+      , endValue   = length samples
+      , weights    = fromIntegral <$> sample_weights
+      , samples
+      }
     sample_weights = replicate (length samples) interval
 
 parseIdent :: Text -> Maybe (Version, Text)
