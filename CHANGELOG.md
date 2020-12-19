@@ -1,8 +1,8 @@
 # Revision history for hs-speedscope
 
-## Unreleased
+## 0.2.1 -- 2020-12-19
 
-* Support ghc-events 0.14 and 0.15
+* Support ghc-events 0.13, 0.14 and 0.15.
 
 ## 0.2 -- 2020-03-21
 
