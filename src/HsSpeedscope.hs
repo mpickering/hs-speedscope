@@ -1,3 +1,4 @@
+{-# language CPP #-}
 {-# language DuplicateRecordFields #-}
 {-# language NamedFieldPuns #-}
 {-# language OverloadedStrings #-}
@@ -19,7 +20,6 @@ import Data.Word
 import GHC.RTS.Events hiding (header, str)
 import qualified Options.Applicative as O
 import Options.Applicative hiding (optional)
-import qualified Paths_hs_speedscope as Paths
 import Speedscope.Schema
 import Text.ParserCombinators.ReadP
 
@@ -102,7 +102,7 @@ convertToSpeedscope (is, ie) (EventLog _h (Data (sortOn evTime -> es))) =
 
 
     version_string :: String
-    version_string = "hs-speedscope@" ++ showVersion Paths.version
+    version_string = "hs-speedscope@" ++ CURRENT_PACKAGE_VERSION
 
     -- Drop 7 events for built in cost centres like GC, IDLE etc
     ccs_raw = reverse (drop 7 (reverse frames))
