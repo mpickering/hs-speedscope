@@ -29,8 +29,6 @@ library
   exposed-modules:
     HsSpeedscope
     Speedscope.Schema
-  other-modules: Paths_hs_speedscope
-  autogen-modules: Paths_hs_speedscope
   -- other-extensions:
   build-depends:       base >= 4.12.0.0 && < 5,
                        ghc-events >= 0.13 && < 0.18,
