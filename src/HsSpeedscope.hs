@@ -4,13 +4,18 @@
 {-# language OverloadedStrings #-}
 {-# language ViewPatterns #-}
 
-module HsSpeedscope where
+module HsSpeedscope (
+    entry,
+) where
 
 import Data.String ( fromString )
 import Control.Monad
 import Data.Aeson
 import Data.Char
+import Data.Functor.Identity (Identity (..))
 import Data.List.Extra
+import Data.Machine (Moore (..), source, (~>), ProcessT, PlanT, Is, construct, await, yield)
+import Data.Machine.Runner (foldlT)
 import Data.Maybe
 import qualified Data.Text
 import Data.Text (Text)
@@ -21,7 +26,7 @@ import GHC.RTS.Events hiding (header, str)
 import qualified Options.Applicative as O
 import Options.Applicative hiding (optional)
 import Speedscope.Schema
-import Text.ParserCombinators.ReadP
+import Text.ParserCombinators.ReadP hiding (between)
 
 
 data SSOptions = SSOptions { file :: FilePath
@@ -58,27 +63,47 @@ run SSOptions{ file, isolateStart, isolateEnd } = do
   el <- either error id <$> readEventLogFromFile file
   encodeFile (file ++ ".json") (convertToSpeedscope (isolateStart, isolateEnd ) el)
 
-data ReadState =
-        ReadAll -- Ignore all future
-      | IgnoreUntil Text ReadState
-      | ReadUntil Text ReadState
-      | IgnoreAll deriving Show
+markers :: (Maybe Text, Maybe Text) -> Moore Text Bool
+markers (Nothing, Nothing) = m where m = Moore True (const m)
+markers (Just s,  Nothing) = start where
+    start = Moore False $ \s' -> if s == s' then end else start
+    end   = Moore True (const end)
+markers (Nothing, Just e)  = start where
+    start = Moore True $ \e' -> if e == e' then end else start
+    end   = Moore False (const end)
+markers (Just s, Just e) = between s e
 
-shouldRead :: ReadState -> Bool
-shouldRead ReadAll = True
-shouldRead (ReadUntil {}) = True
-shouldRead _ = False
+-- | A simple delimiting 'Moore' machine,
+-- which is opened by one constant marker and closed by the other one.
+between :: Text -> Text -> Moore Text Bool
+between x y = open where
+    open  = Moore False open' where open' x' = if x == x' then close else open
+    close = Moore True close' where close' y' = if y == y' then end else close
+    end   = Moore False (const end)
 
-transition :: Text -> ReadState -> ReadState
-transition s r = case r of
-                   (ReadUntil is n) | is `Data.Text.isPrefixOf` s -> n
-                   (IgnoreUntil is n) | is `Data.Text.isPrefixOf` s -> n
-                   _ -> r
+-- | Delimit the event process.
+delimit
+    :: Monad m
+    => (EventInfo -> Bool)  -- ^ predicate to always pass through events
+    -> Moore Text Bool      -- ^ moore process triggered by markers
+    -> ProcessT m Event Event
+delimit p = construct . go where
+    go :: Monad m => Moore Text Bool -> PlanT (Is Event) Event m ()
+    go mm@(Moore s next) = do
+        e <- await
+        case evSpec e of
+            -- on marker step the moore machine.
+            UserMarker m -> do
+                let mm'@(Moore s' _) = next m
+                -- if current or next state is open (== True), emit the marker.
+                when (s || s') $ yield e
+                go mm'
 
-initState :: Maybe Text -> Maybe Text -> ReadState
-initState Nothing Nothing = ReadAll
-initState (Just s) e = IgnoreUntil s (initState Nothing e)
-initState Nothing  (Just e) = ReadUntil e IgnoreAll
+
+            -- for other events, emit if the state is open.
+            ei -> do
+                when (s || p ei) $ yield e
+                go mm
 
 convertToSpeedscope :: (Maybe Text, Maybe Text) -> EventLog -> Value
 convertToSpeedscope (is, ie) (EventLog _h (Data (sortOn evTime -> es))) =
@@ -95,8 +120,10 @@ convertToSpeedscope (is, ie) (EventLog _h (Data (sortOn evTime -> es))) =
           , exporter           = Just $ fromString version_string
           }
   where
-    (EL (fromMaybe "" -> profile_name) el_version (fromMaybe 1 -> interval) frames samples) =
-      snd $ foldl' (flip processEvents) (initState is ie, initEL) es
+    Identity (EL (fromMaybe "" -> profile_name) el_version (fromMaybe 1 -> interval) frames samples) =
+        foldlT (flip processEvents) initEL $
+            source es ~>
+            delimit isInfoEvent (markers (is, ie))
 
     initEL = EL Nothing Nothing Nothing [] []
 
@@ -125,24 +152,29 @@ convertToSpeedscope (is, ie) (EventLog _h (Data (sortOn evTime -> es))) =
     mkSample (Sample _ti [k]) | fromIntegral k >= num_frames = Nothing
     mkSample (Sample ti ccs) = Just (ti, map (subtract 1 . fromIntegral) (reverse ccs))
 
-
-    processEvents :: Event -> (ReadState, EL) -> (ReadState, EL)
-    processEvents (Event _t ei _c) (do_sample, el) =
+    processEvents :: Event -> EL -> EL
+    processEvents (Event _t ei _c) el =
       case ei of
         ProgramArgs _ (pname: _args) ->
-          (do_sample, el { prog_name = Just pname })
+          el { prog_name = Just pname }
         RtsIdentifier _ rts_ident ->
-          (do_sample, el { rts_version = parseIdent rts_ident })
+          el { rts_version = parseIdent rts_ident }
         ProfBegin ival ->
-          (do_sample, el { prof_interval = Just ival })
+          el { prof_interval = Just ival }
         HeapProfCostCentre n l m s _ ->
-          (do_sample, el { cost_centres = CostCentre n l m s : cost_centres el })
+          el { cost_centres = CostCentre n l m s : cost_centres el }
         ProfSampleCostCentre t _ _ st ->
-          if shouldRead do_sample then
-            (do_sample, el { el_samples = Sample t (V.toList st) : el_samples el })
-            else (do_sample, el)
-        (UserMarker m) -> (transition m do_sample, el)
-        _ -> (do_sample, el)
+          el { el_samples = Sample t (V.toList st) : el_samples el }
+        _ ->
+          el
+
+    isInfoEvent :: EventInfo -> Bool
+    isInfoEvent ProgramArgs {}        = True
+    isInfoEvent RtsIdentifier {}      = True
+    isInfoEvent ProfBegin {}          = True
+    isInfoEvent HeapProfCostCentre {} = True
+    isInfoEvent _ = False
+
 
 mkProfile :: Text -> Word64 -> (Capset, [[Int]]) -> Profile
 mkProfile pname interval (_n, samples) = SampledProfile sampledProfile
