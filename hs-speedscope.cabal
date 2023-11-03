@@ -31,7 +31,7 @@ library
     Speedscope.Schema
   -- other-extensions:
   build-depends:       base >= 4.12.0.0 && < 5,
-                       ghc-events >= 0.13 && < 0.18,
+                       ghc-events >= 0.13 && < 0.20,
                        aeson                >= 1.4,
                        text                 >= 1.2,
                        vector               >= 0.12,
