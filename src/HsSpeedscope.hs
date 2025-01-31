@@ -219,7 +219,7 @@ processEventsDefault elProf (Event _t ei _c) =
     HeapProfCostCentre n l m s _ ->
       elProf { cost_centres = CostCentre n l m s : cost_centres elProf }
     ProfSampleCostCentre t _ _ st ->
-      elProf { el_samples = Sample t (V.toList st) : el_samples elProf }
+      elProf { el_samples = Sample (fromIntegral t) (V.toList st) : el_samples elProf }
     _ ->
       elProf
 
