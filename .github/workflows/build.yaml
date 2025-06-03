@@ -107,7 +107,7 @@ jobs:
            cabal install --install-method=copy --installdir=dist
            BINDIST_NAME=hs-speedscope-ghc-${{matrix.ghc-version}}-${{ matrix.os }}${{ matrix.container && '-' }}${{matrix.container && 'alpine'}}
            echo "BINDIST_NAME=$BINDIST_NAME" >> $GITHUB_ENV
-           tar -czf "$BINDIST_NAME.tar.xz" -C dist hs-speedscope
+           tar -cJf "$BINDIST_NAME.tar.xz" -C dist hs-speedscope
            echo bindist is $BINDIST_NAME.tar.xz
 
       - name: Upload bindist to artifacts
