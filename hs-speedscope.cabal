@@ -17,7 +17,13 @@ author:              Matthew Pickering
 maintainer:          matthewtpickering@gmail.com
 -- copyright:
 category: Development
-tested-with: GHC==8.8.1
+tested-with:
+  GHC ==9.12.1
+  GHC ==9.10.1
+  GHC ==9.8.4
+  GHC ==9.6.6
+  GHC ==9.4.8
+  GHC ==9.2.8
 extra-source-files:  CHANGELOG.md
                      README.md
 
