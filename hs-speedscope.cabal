@@ -18,10 +18,11 @@ maintainer:          matthewtpickering@gmail.com
 -- copyright:
 category: Development
 tested-with:
-  GHC ==9.12.1
-  GHC ==9.10.1
+  GHC ==9.14.1
+  GHC ==9.12.2
+  GHC ==9.10.3
   GHC ==9.8.4
-  GHC ==9.6.6
+  GHC ==9.6.7
   GHC ==9.4.8
   GHC ==9.2.8
 extra-doc-files:  CHANGELOG.md
@@ -37,7 +38,7 @@ library
     Speedscope.Schema
   -- other-extensions:
   build-depends:       base >= 4.12.0.0 && < 5,
-                       ghc-events >= 0.13 && < 0.21,
+                       ghc-events >= 0.13 && < 0.22,
                        aeson >= 1.4 && < 2.3,
                        text >= 1.2 && < 2.2,
                        vector >= 0.12 && < 0.14,
