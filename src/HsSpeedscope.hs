@@ -118,13 +118,11 @@ markers (Just s, Just e) =
 -- predicate.
 delimit
     :: Monad m
-    => (EventInfo -> Bool)
-    -- ^ Only emit events which pass this predicate
-    -> Moore Text Bool
+    => Moore Text Bool
     -- ^ Only emit events when this 'Moore' process state is 'True'. The process
     -- will be given the values of 'UserMarker's in the event log.
     -> ProcessT m Event Event
-delimit p =
+delimit =
     construct . go
   where
     go :: Monad m => Moore Text Bool -> PlanT (Is Event) Event m ()
@@ -138,9 +136,9 @@ delimit p =
             when (s || s') $ yield e
             go mm'
 
-        -- for other events, emit if the state is open and predicate passes
-        ei -> do
-            when (s || p ei) $ yield e
+        -- for other events, emit if the state is open
+        _ -> do
+            when s $ yield e
             go mm
 
 -- | Convert an 'EventLog' into a speedscope profile JSON value. To convert the
@@ -159,7 +157,7 @@ convertToSpeedscope
   -- delimiters and predicate
   -> EventLog
   -> Value
-convertToSpeedscope (is, ie) considerEvent processEvents (EventLog _h (Data (sortOn evTime -> es))) =
+convertToSpeedscope (is, ie) considerEvent processEvents (EventLog _h (Data rawEvents)) =
   case el_version of
     Just (ghc_version, _) | ghc_version < makeVersion [8,9,0]  ->
       error ("Eventlog is from ghc-" ++ showVersion ghc_version ++ " hs-speedscope only works with GHC 8.10 or later")
@@ -173,10 +171,11 @@ convertToSpeedscope (is, ie) considerEvent processEvents (EventLog _h (Data (sor
           , exporter           = Just $ fromString version_string
           }
   where
+    es = sortOn evTime . filter (considerEvent . evSpec) $ rawEvents
     Identity (EventLogProfile (fromMaybe "" -> profile_name) el_version (fromMaybe 1 -> interval) frames samples) =
         foldlT processEvents initEL $
             source es ~>
-            delimit considerEvent (markers (is, ie))
+            delimit (markers (is, ie))
 
     initEL = EventLogProfile Nothing Nothing Nothing [] []
 
@@ -228,6 +227,7 @@ isInfoEvent ProgramArgs {}        = True
 isInfoEvent RtsIdentifier {}      = True
 isInfoEvent ProfBegin {}          = True
 isInfoEvent HeapProfCostCentre {} = True
+isInfoEvent ProfSampleCostCentre{} = True
 isInfoEvent _ = False
 
 mkProfile :: Text -> Word64 -> (Capset, [[Int]]) -> Profile
