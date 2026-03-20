@@ -200,9 +200,15 @@ convertToSpeedscope (is, ie) considerEvent processEvents (EventLog _h (Data rawE
     mkFrame (CostCentre _n name _m file) = Frame{ name, file = Just file, col = Nothing, line = Nothing }
 
     mkSample :: Sample -> Maybe (Capset, [Int])
-    -- Filter out system frames
-    mkSample (Sample _ti [k]) | fromIntegral k >= num_frames = Nothing
-    mkSample (Sample ti ccs) = Just (ti, map (subtract 1 . fromIntegral) (reverse ccs))
+    mkSample (Sample ti ccs) =
+      if null ccsWithoutSystemFrames then
+        Nothing
+      else
+        Just (ti, map (subtract 1 . fromIntegral) (reverse ccsWithoutSystemFrames))
+      where
+        -- Filter out system frames.
+        -- These often occur at the root, but can sometimes exist inside the stack.
+        ccsWithoutSystemFrames = filter (\k -> fromIntegral k < num_frames) ccs
 
 -- | Default processing function to convert profiling events into a classic speedscope
 -- profile
