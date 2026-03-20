@@ -1,5 +1,13 @@
 # Revision history for hs-speedscope
 
+## 0.3.1 -- 2026-03-20
+* Critical: fix event dropping logic [#30](https://github.com/mpickering/hs-speedscope/pull/30)
+  This bug was introduced in 0.3.0.
+* Fix cabal check warning [#27](https://github.com/mpickering/hs-speedscope/pull/27)
+* Support GHC-9.14 [#28](https://github.com/mpickering/hs-speedscope/pull/28)
+* Allow passing RTS options [#29](https://github.com/mpickering/hs-speedscope/pull/29)
+* Fix logic for dropping system CCS entries [#32](https://github.com/mpickering/hs-speedscope/pull/32)
+
 ## 0.3.0 -- 2025-06-07
 * Introduce Speedscope.Schema [#12](https://github.com/mpickering/hs-speedscope/pull/12)
 * Allow more recent ghc-events [#13](https://github.com/mpickering/hs-speedscope/pull/13)

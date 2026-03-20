@@ -1,6 +1,6 @@
 cabal-version:       2.4
 name:                hs-speedscope
-version:             0.3.0
+version:             0.3.1
 synopsis: Convert an eventlog into the speedscope json format
 description: Convert an eventlog into the speedscope json format. The interactive visualisation
              displays an approximate trace of the program and summary views akin to .prof files.
